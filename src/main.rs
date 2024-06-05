@@ -65,11 +65,14 @@ impl GameState {
         } else if is_key_down(macroquad::input::KeyCode::Left) || is_key_down(miniquad::KeyCode::A)
         {
             self.x_vel = -XVEL;
-        } else if self.x_vel > 0.0 {
-            self.x_vel = f32::max(0.0, self.x_vel - XACCEL);
-        } else if self.x_vel < 0.0 {
-            self.x_vel = f32::min(0.0, self.x_vel + XACCEL);
+        } else {
+            self.x_vel = 0.0;
         }
+        //  else if self.x_vel > 0.0 {
+        //     self.x_vel = f32::max(0.0, self.x_vel - XACCEL);
+        // } else if self.x_vel < 0.0 {
+        //     self.x_vel = f32::min(0.0, self.x_vel + XACCEL);
+        // }
 
         let platforms_iter = self.platforms.iter();
 
@@ -77,9 +80,19 @@ impl GameState {
 
         // check collision with rect
         for platform in platforms_iter {
-            if self.dood.overlaps(platform) && (platform.top() - self.dood.bottom()) >= -2.0 {
-                // dbg!(platform.top(), self.dood.bottom());
-                self.y_vel = -5.0;
+            if self.dood.overlaps(platform) {
+                if platform.left() < self.dood.right() && self.dood.right() < platform.right() {
+                    self.dood
+                        .move_to(Vec2::new(platform.left() - self.dood.w, self.dood.y));
+                } else if self.dood.left() > platform.right()
+                    && self.dood.right() > platform.right()
+                {
+                    self.dood.move_to(Vec2::new(platform.right(), self.dood.y));
+                }
+                if self.dood.top() < platform.bottom() || self.dood.bottom() > platform.top() {
+                    self.y_vel = if self.y_vel < 0.0 { -self.y_vel } else { -5.0 };
+                }
+                dbg!(platform.top(), self.dood.bottom());
             }
         }
 
