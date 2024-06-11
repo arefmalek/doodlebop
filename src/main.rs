@@ -1,10 +1,12 @@
-use macroquad::{prelude::*, ui::KeyCode};
-use std::cmp;
+extern crate rand;
+use rand::{thread_rng, Rng};
+
+use macroquad::prelude::*;
 
 const XVEL: f32 = 3.5;
 const XACCEL: f32 = 0.05;
 const PLATFORM_HEIGHT: f32 = 10.0;
-const PLATFORM_WIDTH: f32 = 30.0;
+const PLATFORM_WIDTH: f32 = 40.0;
 const PLATFORM_SPACING: f32 = 2.0;
 
 struct GameState {
@@ -15,6 +17,7 @@ struct GameState {
     dood_color: Color,
     platform_color: Color,
     platform_levels: usize,
+    score: f32 
 }
 
 impl GameState {
@@ -38,23 +41,27 @@ impl GameState {
                 self.platform_color,
             )
         }
+
+        draw_text(&self.score.to_string(), 10.0, 100.0, 30.0, self.dood_color);
     }
 
     fn update(&mut self) {
         // updating state
+        let mut rng = thread_rng();
+
 
         // adding state until we've reached the top
-        let mut curr_levels = self.platforms.len();
 
-        while curr_levels < self.platform_levels {
+        while self.platforms.len() < self.platform_levels {
+            let curr_levels = self.platforms.len();
+
             let curr_y =
                 screen_height() - (curr_levels as f32) * PLATFORM_HEIGHT * PLATFORM_SPACING;
-            let curr_x =
-                (screen_width() / 2.0 + (curr_levels as f32) * PLATFORM_WIDTH) % screen_width();
+            let curr_x = rng.gen_range((0.0)..(screen_width() - PLATFORM_WIDTH));
+            // let curr_x =
+            //     (screen_width() / 2.0 + (curr_levels as f32) * PLATFORM_WIDTH) % screen_width();
             self.platforms
                 .push(Rect::new(curr_x, curr_y, PLATFORM_WIDTH, PLATFORM_HEIGHT));
-
-            curr_levels += 1
         }
 
         // define jump
@@ -68,34 +75,35 @@ impl GameState {
         } else {
             self.x_vel = 0.0;
         }
-        //  else if self.x_vel > 0.0 {
-        //     self.x_vel = f32::max(0.0, self.x_vel - XACCEL);
-        // } else if self.x_vel < 0.0 {
-        //     self.x_vel = f32::min(0.0, self.x_vel + XACCEL);
-        // }
 
         let platforms_iter = self.platforms.iter();
-
-        // file screen with platform
 
         // check collision with rect
         for platform in platforms_iter {
             if self.dood.overlaps(platform) {
-                if platform.left() < self.dood.right() && self.dood.right() < platform.right() {
-                    self.dood
-                        .move_to(Vec2::new(platform.left() - self.dood.w, self.dood.y));
-                } else if self.dood.left() > platform.right()
-                    && self.dood.right() > platform.right()
-                {
-                    self.dood.move_to(Vec2::new(platform.right(), self.dood.y));
-                }
+                let sideways =
+                    self.dood.top() < platform.top() && self.dood.bottom() > platform.bottom();
                 if self.dood.top() < platform.bottom() || self.dood.bottom() > platform.top() {
                     self.y_vel = if self.y_vel < 0.0 { -self.y_vel } else { -5.0 };
                 }
-                dbg!(platform.top(), self.dood.bottom());
+                if sideways
+                    && platform.left() < self.dood.right()
+                    && self.dood.right() < platform.right()
+                {
+                    self.dood
+                        .move_to(Vec2::new(platform.left() - self.dood.w - 3.0, self.dood.y));
+                    dbg!(platform, self.dood);
+                } else if sideways
+                    && self.dood.left() > platform.right()
+                    && self.dood.right() > platform.right()
+                {
+                    self.dood
+                        .move_to(Vec2::new(platform.right() + 3.0, self.dood.y));
+                }
             }
         }
 
+        // move if on other side of screen
         if self.dood.right() < 0.0 {
             self.dood
                 .move_to(Vec2::new(screen_width() - self.dood.w, self.dood.y));
@@ -111,9 +119,22 @@ impl GameState {
             self.y_vel += yaccel;
         }
 
-        // moving the position of the dude
+        // moving the position of the dude or screen based on height
         self.dood.x += self.x_vel;
-        self.dood.y += self.y_vel;
+        if self.dood.y < (screen_height() / 2.0) && self.y_vel < 0.0 {
+            for platform in self.platforms.iter_mut() {
+                // dbg!(platform);
+                platform.move_to(Vec2::new(platform.x, platform.y - self.y_vel));
+            }
+
+            self.platforms = self.platforms.iter().filter(|&x| x.top() < screen_height()).cloned().collect();
+
+            // updating score
+            self.score -= self.y_vel;
+        }
+        else {
+            self.dood.y += self.y_vel;
+        }
     }
 }
 
@@ -128,6 +149,7 @@ async fn main() {
         platform_color: YELLOW,
         dood_color: GREEN,
         platform_levels: (screen_height() / (PLATFORM_HEIGHT * PLATFORM_SPACING)).floor() as usize,
+        score: 0.0,
     };
     loop {
         mainstate.update();
