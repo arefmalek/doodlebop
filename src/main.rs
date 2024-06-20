@@ -7,7 +7,7 @@ const XVEL: f32 = 3.5;
 const XACCEL: f32 = 0.05;
 const PLATFORM_HEIGHT: f32 = 10.0;
 const PLATFORM_WIDTH: f32 = 40.0;
-const PLATFORM_SPACING: f32 = 2.0;
+const PLATFORM_SPACING: f32 = 5.0;
 
 struct GameState {
     dood: Rect,
@@ -17,7 +17,8 @@ struct GameState {
     dood_color: Color,
     platform_color: Color,
     platform_levels: usize,
-    score: f32 
+    score: f32,
+    game_over: bool,
 }
 
 impl GameState {
@@ -43,12 +44,20 @@ impl GameState {
         }
 
         draw_text(&self.score.to_string(), 10.0, 100.0, 30.0, self.dood_color);
+        if self.game_over {
+            draw_text(
+                "refresh page to play again",
+                screen_width() / 4.0,
+                screen_height() / 2.0,
+                50.0,
+                RED,
+            )
+        }
     }
 
     fn update(&mut self) {
         // updating state
         let mut rng = thread_rng();
-
 
         // adding state until we've reached the top
 
@@ -60,8 +69,14 @@ impl GameState {
             let curr_x = rng.gen_range((0.0)..(screen_width() - PLATFORM_WIDTH));
             // let curr_x =
             //     (screen_width() / 2.0 + (curr_levels as f32) * PLATFORM_WIDTH) % screen_width();
+
             self.platforms
                 .push(Rect::new(curr_x, curr_y, PLATFORM_WIDTH, PLATFORM_HEIGHT));
+            if curr_levels == 1 {
+                dbg!(curr_x, curr_y);
+                self.dood
+                    .move_to(Vec2::new(curr_x, curr_y - PLATFORM_HEIGHT * 2.0));
+            }
         }
 
         // define jump
@@ -83,22 +98,10 @@ impl GameState {
             if self.dood.overlaps(platform) {
                 let sideways =
                     self.dood.top() < platform.top() && self.dood.bottom() > platform.bottom();
-                if self.dood.top() < platform.bottom() || self.dood.bottom() > platform.top() {
-                    self.y_vel = if self.y_vel < 0.0 { -self.y_vel } else { -5.0 };
-                }
-                if sideways
-                    && platform.left() < self.dood.right()
-                    && self.dood.right() < platform.right()
+                if self.dood.bottom() < ((platform.bottom() + platform.top()) / 2.0)
+                    && self.y_vel >= -0.5
                 {
-                    self.dood
-                        .move_to(Vec2::new(platform.left() - self.dood.w - 3.0, self.dood.y));
-                    dbg!(platform, self.dood);
-                } else if sideways
-                    && self.dood.left() > platform.right()
-                    && self.dood.right() > platform.right()
-                {
-                    self.dood
-                        .move_to(Vec2::new(platform.right() + 3.0, self.dood.y));
+                    self.y_vel = -5.0;
                 }
             }
         }
@@ -113,7 +116,11 @@ impl GameState {
 
         // if dood disappears, start over
         if self.dood.bottom() >= screen_height() {
-            self.y_vel = -5.0
+            self.game_over = true;
+            self.dood.move_to(Vec2::new(
+                self.dood.left(),
+                screen_height() + self.dood.h * 2.0,
+            ));
         } else {
             // otherwise accel downward
             self.y_vel += yaccel;
@@ -123,16 +130,19 @@ impl GameState {
         self.dood.x += self.x_vel;
         if self.dood.y < (screen_height() / 2.0) && self.y_vel < 0.0 {
             for platform in self.platforms.iter_mut() {
-                // dbg!(platform);
                 platform.move_to(Vec2::new(platform.x, platform.y - self.y_vel));
             }
 
-            self.platforms = self.platforms.iter().filter(|&x| x.top() < screen_height()).cloned().collect();
+            self.platforms = self
+                .platforms
+                .iter()
+                .filter(|&x| x.top() < screen_height())
+                .cloned()
+                .collect();
 
             // updating score
             self.score -= self.y_vel;
-        }
-        else {
+        } else {
             self.dood.y += self.y_vel;
         }
     }
@@ -150,6 +160,7 @@ async fn main() {
         dood_color: GREEN,
         platform_levels: (screen_height() / (PLATFORM_HEIGHT * PLATFORM_SPACING)).floor() as usize,
         score: 0.0,
+        game_over: false,
     };
     loop {
         mainstate.update();
